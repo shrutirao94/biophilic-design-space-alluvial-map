@@ -1,0 +1,39 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #FFFFFF;
+  color: #FFFFFF;
+}
+
+#app {
+  margin: 0;
+  padding: 0;
+}
+
+.header h1 {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.header .sub {
+  margin: 0 0 18px 0;
+  color: #a9b4c0;
+  font-size: 13px;
+}
+
+#viz {
+  width: 100%;
+  height: 100vh;
+  overflow: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+/* optional: prevent SVG from behaving like inline text */
+#viz svg {
+  display: block;
+}
