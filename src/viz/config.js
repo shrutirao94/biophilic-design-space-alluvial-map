@@ -1,7 +1,7 @@
 // src/viz/config.js
 
 export const AXES = [
-  "Concept Cluster",
+  "Design-Concept",
   "Level of Mediation",
   "Interaction Type",
   "Spatial Context",
@@ -12,7 +12,7 @@ export const AXES = [
 ];
 
 export const AXIS_DESCRIPTORS = {
-  "Concept Cluster": "design concept",
+  "Design-Concept": "",
   "Sensory Modality": "sensed through",
   "Interaction Type": "how engaged",
   "Affective Aim": "felt goal",
@@ -23,12 +23,15 @@ export const AXIS_DESCRIPTORS = {
 };
 
 export const FIG = {
-  width: 2400,
-  height: 1050,
-  // Increased right + bottom margins:
-  // - right: prevents truncation of Affective Aim labels (on the right side)
-  // - bottom: creates a true bottom “label band” so axis titles/descriptors don’t compete with dense lines
-  margin: { top: 60, right: 80, bottom: 60, left: 80 },
+  // Print-first canvas for sidewaysfigure placement
+  width: 2800,
+  height: 1460,
+
+  // Margins tuned for larger typography:
+  // - bottom: provides a true label band for axis title + descriptor
+  // - right/left: keeps edge labels from clipping
+  margin: { top: 150, right: 220, bottom: 80, left: 120 },
+
   axisPaddingX: 36,
   nodeWidth: 14,
   nodePadding: 6,
@@ -50,12 +53,12 @@ export const COLORS = {
 // Bright, distinct cluster colours (DC1–DC6)
 // NOTE: preprocess normalises C0..C5 -> DC1..DC6
 export const CLUSTER_COLORS = {
-  DC1: "#007AFF", // blue
-  DC2: "#FF3B30", // red
-  DC3: "#34C759", // green
-  DC4: "#FFCC00", // yellow
-  DC5: "#AF52DE", // purple
-  DC6: "#FF9500", // orange
+  DC1: "#1b9e77", // blue
+  DC2: "#d95f02", // red
+  DC3: "#7570b3", // green
+  DC4: "#e7298a", // yellow
+  DC5: "#66a61e", // purple
+  DC6: "#e6ab02", // orange
 };
 
 export const RIBBON = {
@@ -64,41 +67,52 @@ export const RIBBON = {
   opacityDim: 0.08,
 };
 
+// Typography (paper-first; tuned for sidewaysfigure)
 export const TYPE = {
-  titleSize: 22,
-  subtitleSize: 14,
+  // Figure header
+  titleSize: 48,
+  subtitleSize: 34,
 
-  // Your bottom axis band is now “quiet”; render.js can override fill/opacity,
-  // but keeping sizes sensible helps avoid crowding.
-  axisTitleSize: 15,
-  axisDescSize: 11,
+  // Axis band (bottom)
+  axisTitleSize: 30,
+  axisDescSize: 20,
 
-  nodeLabelSize: 14,
-  countSize: 11,
+  // Node labels
+  nodeLabelSize: 28,
+  countSize: 18,
 };
 
 export const LABELS = {
-  nodeTextDx: 6,
+  nodeTextDx: 1,
+  rightLabelPad: 18,
 };
 
 // Render settings (flip these without touching render.js)
 export const RENDER = {
-  mode: "parallel",               // "parallel" | "alluvial"
-  colorBy: "Concept Cluster",      // "Concept Cluster" | "Affective Aim"
+  mode: "parallel",          // "parallel" | "alluvial"
+  colorBy: "Design-Concept" // "Concept Cluster" | "Affective Aim"
 };
-
 // Parallel styling
 export const PARALLEL = {
-  strokeOpacity: 0.25,
-  strokeWidth: 1.5,
-  curveAlpha: 0.65,
+  blendMode: "normal",
+  strokeOpacity: 0.35,
+  strokeWidth: 1.1,
+  curveAlpha: 0.9,
 
-  glow: true,
+  glow: false,
   glowWidth: 3.2,
   glowOpacity: 0.07,
+
+  aimLanes: true,
+  aimLaneDx: 90,       // how early the lane starts before the final axis
+  aimLaneJitter: 8,    // small deterministic vertical separation to avoid perfect overlap
+
 
   // Optional (render.js will use if present)
   emergeDx: 52,
   jitterR: 5,
 };
-
+//export const LABELS = {
+  //nodeTextDx: 6,
+  //rightLabelPad: 38,
+//};

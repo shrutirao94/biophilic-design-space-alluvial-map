@@ -1,5 +1,6 @@
 // src/viz/preprocess.js
 import { RENDER } from "./config.js";
+import { reduceCrossings } from "./ordering.js";
 
 function nodeId(axis, label) {
   return `${axis}::${label}`;
@@ -17,22 +18,48 @@ function dominantKey(obj) {
   return best;
 }
 
-// Normalise Concept Cluster labels so nodes/links use DC1..DC6 consistently
+/**
+ * Normalise Concept Cluster labels so nodes/links use DC1..DC6 consistently.
+ *
+ * Supported inputs:
+ * - "DC1".."DC6" -> unchanged
+ * - legacy "C0".."C5" -> DC1..DC6  (add 1)
+ * - legacy "C1".."C6" -> DC1..DC6  (unchanged index)
+ * - anything else -> returned as-is (trimmed)
+ */
 function normConceptCluster(v) {
   const s = String(v ?? "").trim();
   if (!s) return "";
-  const m = s.match(/^C(\d+)$/i);
-  if (m) return `DC${Number(m[1]) + 1}`;
-  return s; // already DC*
+
+  // Already in desired form: DC1..DC6 (or beyond)
+  const mDC = s.match(/^DC(\d+)$/i);
+  if (mDC) return `DC${Number(mDC[1])}`;
+
+  // Legacy: C0..C5  -> DC1..DC6
+  const mC0 = s.match(/^C(\d+)$/i);
+  if (mC0) {
+    const n = Number(mC0[1]);
+    // If it was truly C0-based, map 0.. -> +1
+    // If it was 1-based already, we can keep it stable by checking 0 specifically.
+    if (n === 0) return "DC1";
+    // Heuristic:
+    // - if n is between 0 and 5 inclusive, assume 0-based and +1
+    // - if n is between 1 and 6 inclusive, assume 1-based and keep
+    if (n >= 0 && n <= 5) return `DC${n + 1}`;
+    if (n >= 1 && n <= 6) return `DC${n}`;
+    // otherwise: still map to DCn for consistency
+    return `DC${n}`;
+  }
+
+  return s;
 }
 
-// Treat blanks as an explicit bucket so every axis sums to total rows.
-// This prevents "wasted space" (vertical slack) in layout.
+// Treat blanks as explicit bucket (safe even if you rarely use it)
 const MISSING_LABEL = "Missing";
 
 function normLabel(axis, raw) {
   let label = String(raw ?? "").trim();
-  if (axis === "Concept Cluster") label = normConceptCluster(label);
+  if (axis === "Design-Concept") label = normConceptCluster(label);
   return label || MISSING_LABEL;
 }
 
@@ -51,10 +78,10 @@ export function preprocess(rows, { axes }) {
   }
 
   // ----------------------------
-  // 2) Per-axis category order
-  //    - default: frequency desc
-  //    - Concept Cluster: DC1..DC6 sequential
-  //    - Missing goes LAST
+  // 2) Initial per-axis category order
+  //    - Concept Cluster fixed (DC1..DC6)
+  //    - others by frequency desc
+  //    - Missing last (if present)
   // ----------------------------
   const SEQ_DC = ["DC1", "DC2", "DC3", "DC4", "DC5", "DC6"];
 
@@ -67,18 +94,25 @@ export function preprocess(rows, { axes }) {
       totalsByCategory.set(label, v);
     }
 
-    // Pull Missing out so we can append at end
     const missingCount = totalsByCategory.get(MISSING_LABEL) || 0;
 
     let categories;
-    if (axis === "Concept Cluster") {
-      // Sequential, but only include ones present in data
+    if (axis === "Design-Concept") {
+      // Keep DC1..DC6 in canonical order if present
       categories = SEQ_DC.filter(dc => totalsByCategory.has(dc));
 
-      // Append any unexpected labels (except Missing) alphabetically
+      // Any other clusters (e.g., DC7) appear after, sorted
       const extras = [...totalsByCategory.keys()]
         .filter(l => !SEQ_DC.includes(l) && l !== MISSING_LABEL)
-        .sort();
+        .sort((a, b) => {
+          // Sort DC-like labels numerically if possible; otherwise lexicographically
+          const ma = String(a).match(/^DC(\d+)$/i);
+          const mb = String(b).match(/^DC(\d+)$/i);
+          if (ma && mb) return Number(ma[1]) - Number(mb[1]);
+          if (ma) return -1;
+          if (mb) return 1;
+          return String(a).localeCompare(String(b));
+        });
 
       categories = categories.concat(extras);
     } else {
@@ -88,7 +122,6 @@ export function preprocess(rows, { axes }) {
         .map(([label]) => label);
     }
 
-    // Always append Missing at the end (if present)
     if (missingCount > 0 && !categories.includes(MISSING_LABEL)) {
       categories.push(MISSING_LABEL);
     }
@@ -97,32 +130,14 @@ export function preprocess(rows, { axes }) {
   });
 
   // ----------------------------
-  // 3) Nodes
+  // 3) Aggregated links between adjacent axes
   // ----------------------------
-  const nodes = [];
-  for (const a of axisInfo) {
-    a.categories.forEach((label, order) => {
-      nodes.push({
-        id: nodeId(a.axis, label),
-        axis: a.axis,
-        label,
-        index: a.index,
-        order,
-        value: a.totalsByCategory.get(label) || 0,
-      });
-    });
-  }
-
-  // ----------------------------
-  // 4) Aggregated links between adjacent axes
-  //    Track byCluster (for alluvial colouring if desired)
-  // ----------------------------
-  const colorCol = RENDER?.colorBy || "Concept Cluster";
-
+  const colorCol = RENDER?.colorBy || "Design-Concept";
   const linkAgg = new Map(); // k -> {source,target,value,byCluster:Map}
+
   for (const r of rows) {
     let clusterKey = String(r[colorCol] ?? "").trim();
-    if (colorCol === "Concept Cluster") clusterKey = normConceptCluster(clusterKey);
+    if (colorCol === "Design-Concept") clusterKey = normConceptCluster(clusterKey);
     clusterKey = clusterKey || MISSING_LABEL;
 
     for (let i = 0; i < axes.length - 1; i++) {
@@ -140,11 +155,42 @@ export function preprocess(rows, { axes }) {
         linkAgg.set(k, { source: s, target: t, value: 0, byCluster: new Map() });
       }
       const obj = linkAgg.get(k);
+
       obj.value += 1;
       obj.byCluster.set(clusterKey, (obj.byCluster.get(clusterKey) || 0) + 1);
     }
   }
 
+  // ----------------------------
+  // 4) Crossing reduction (mutates axisInfo.categories in place)
+  //    Concept Cluster remains locked.
+  // ----------------------------
+  reduceCrossings(axisInfo, linkAgg, {
+    lockAxisName: "Design-Concept",
+    missingLabel: MISSING_LABEL,
+    iterations: 6,
+  });
+
+  // ----------------------------
+  // 5) Nodes (after reordering)
+  // ----------------------------
+  const nodes = [];
+  for (const a of axisInfo) {
+    a.categories.forEach((label, order) => {
+      nodes.push({
+        id: nodeId(a.axis, label),
+        axis: a.axis,
+        label,
+        index: a.index,
+        order,
+        value: a.totalsByCategory.get(label) || 0,
+      });
+    });
+  }
+
+  // ----------------------------
+  // 6) Links (materialise)
+  // ----------------------------
   const links = [...linkAgg.values()].map((d) => {
     const byCluster = Object.fromEntries(d.byCluster.entries());
     return {
